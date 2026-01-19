@@ -53,3 +53,17 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+.sync.ffs_db
+.DS_Store
+# Gradle
+.gradle/
+build/
+**/build/
+
+**/buildsystem/
+
+# Android Studio
+.idea/
+*.iml
+sync.ffs_lock
