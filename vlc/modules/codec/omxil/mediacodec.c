@@ -42,6 +42,8 @@
 
 #include "mediacodec.h"
 #include "../codec/hxxx_helper.h"
+#include "../../packetizer/hxxx_nal.h"
+#include "../../packetizer/hevc_nal.h"
 #include <OMX_Core.h>
 #include <OMX_Component.h>
 #include "omxil_utils.h"
@@ -51,6 +53,72 @@
 
 #define DECODE_FLAG_RESTART (0x01)
 #define DECODE_FLAG_DRAIN (0x02)
+
+#define VLC_CODEC_DVHE VLC_FOURCC('d','v','h','e')
+#define VLC_CODEC_DVH1 VLC_FOURCC('d','v','h','1')
+#define VLC_CODEC_DVA1 VLC_FOURCC('d','v','a','1')
+#define VLC_CODEC_DVAV VLC_FOURCC('d','v','a','v')
+
+static inline vlc_fourcc_t BaseVideoCodec(vlc_fourcc_t codec)
+{
+    switch (codec)
+    {
+        case VLC_CODEC_DVHE:
+        case VLC_CODEC_DVH1:
+            return VLC_CODEC_HEVC;
+        case VLC_CODEC_DVA1:
+        case VLC_CODEC_DVAV:
+            return VLC_CODEC_H264;
+        default:
+            return codec;
+    }
+}
+
+static bool BlockHasHevcNal62(const struct hxxx_helper *hh, const block_t *p_block)
+{
+    if (!p_block || p_block->i_buffer < 2)
+        return false;
+
+    /* Prefer AnnexB scan (most common after hxxx_helper conversion). */
+    bool has_startcode = false;
+    for (size_t i = 0; i + 3 < p_block->i_buffer; ++i)
+    {
+        if (p_block->p_buffer[i] == 0 && p_block->p_buffer[i + 1] == 0 &&
+            (p_block->p_buffer[i + 2] == 1 ||
+             (p_block->p_buffer[i + 2] == 0 && p_block->p_buffer[i + 3] == 1)))
+        {
+            has_startcode = true;
+            break;
+        }
+    }
+
+    const uint8_t *p_nal = NULL;
+    size_t i_nal = 0;
+    hxxx_iterator_ctx_t it;
+
+    if (has_startcode)
+    {
+        hxxx_iterator_init(&it, p_block->p_buffer, p_block->i_buffer, 0);
+        while (hxxx_annexb_iterate_next(&it, &p_nal, &i_nal))
+        {
+            if (i_nal >= 2 && hevc_getNALType(p_nal) == 62)
+                return true;
+        }
+        return false;
+    }
+
+    /* Fallback: length-prefixed NAL units (depends on container). */
+    if (hh && hh->i_nal_length_size)
+    {
+        hxxx_iterator_init(&it, p_block->p_buffer, p_block->i_buffer, hh->i_nal_length_size);
+        while (hxxx_iterate_next(&it, &p_nal, &i_nal))
+        {
+            if (i_nal >= 2 && hevc_getNALType(p_nal) == 62)
+                return true;
+        }
+    }
+    return false;
+}
 /**
  * Callback called when a new block is processed from DecodeBlock.
  * It returns -1 in case of error, 0 if block should be dropped, 1 otherwise.
@@ -106,6 +174,12 @@ struct decoder_sys_t
     bool            b_drained;
     bool            b_adaptive;
     int             i_decode_flags;
+
+    int             i_mc_profile;
+    const char     *psz_mc_fallback_mime;
+    int             i_mc_fallback_profile;
+    bool            b_dovi_probe_done;
+    vlc_fourcc_t     i_base_codec;
 
     union
     {
@@ -411,7 +485,11 @@ static int ParseExtra(decoder_t *p_dec)
     uint8_t *p_extra = p_dec->fmt_in.p_extra;
     int i_extra = p_dec->fmt_in.i_extra;
 
-    switch (p_dec->fmt_in.i_codec)
+    vlc_fourcc_t codec = p_dec->fmt_in.i_codec;
+    if (p_dec->fmt_in.i_cat == VIDEO_ES)
+        codec = BaseVideoCodec(codec);
+
+    switch (codec)
     {
     case VLC_CODEC_H264:
         return ParseVideoExtraH264(p_dec, p_extra, i_extra);
@@ -583,6 +661,11 @@ static int OpenDecoder(vlc_object_t *p_this, pf_MediaCodecApi_init pf_init)
     int i_ret;
     int i_profile = p_dec->fmt_in.i_profile;
     const char *mime = NULL;
+    const char *fallback_mime = NULL;
+    int mime_profile = i_profile;
+    int fallback_profile = i_profile;
+    vlc_fourcc_t base_codec = p_dec->fmt_in.i_codec;
+    bool b_used_fallback = false;
 
     /* Video or Audio if "mediacodec-audio" bool is true */
     if (p_dec->fmt_in.i_cat != VIDEO_ES && (p_dec->fmt_in.i_cat != AUDIO_ES
@@ -601,7 +684,35 @@ static int OpenDecoder(vlc_object_t *p_this, pf_MediaCodecApi_init pf_init)
         if (!p_dec->fmt_in.video.i_width || !p_dec->fmt_in.video.i_height)
             return VLC_EGENERIC;
 
+        base_codec = BaseVideoCodec(p_dec->fmt_in.i_codec);
+
         switch (p_dec->fmt_in.i_codec) {
+        case VLC_CODEC_DVHE:
+        case VLC_CODEC_DVH1:
+            if (i_profile == -1)
+            {
+                uint8_t i_hevc_profile;
+                if (hevc_get_profile_level(&p_dec->fmt_in, &i_hevc_profile, NULL, NULL))
+                    i_profile = i_hevc_profile;
+            }
+            mime = "video/dolby-vision";
+            mime_profile = 0; /* Don't filter profiles for DV MIME */
+            fallback_mime = "video/hevc";
+            fallback_profile = i_profile;
+            break;
+        case VLC_CODEC_DVA1:
+        case VLC_CODEC_DVAV:
+            if (i_profile == -1)
+            {
+                uint8_t i_h264_profile;
+                if (h264_get_profile_level(&p_dec->fmt_in, &i_h264_profile, NULL, NULL))
+                    i_profile = i_h264_profile;
+            }
+            mime = "video/dolby-vision";
+            mime_profile = 0; /* Don't filter profiles for DV MIME */
+            fallback_mime = "video/avc";
+            fallback_profile = i_profile;
+            break;
         case VLC_CODEC_HEVC:
             if (i_profile == -1)
             {
@@ -627,7 +738,11 @@ static int OpenDecoder(vlc_object_t *p_this, pf_MediaCodecApi_init pf_init)
             mime = "video/mpeg2";
             break;
         case VLC_CODEC_WMV3: mime = "video/x-ms-wmv"; break;
-        case VLC_CODEC_VC1:  mime = "video/wvc1"; break;
+        case VLC_CODEC_VC1:
+            mime = "video/wvc1";
+            fallback_mime = "video/x-ms-wmv";
+            fallback_profile = i_profile;
+            break;
         case VLC_CODEC_VP8:  mime = "video/x-vnd.on2.vp8"; break;
         case VLC_CODEC_VP9:  mime = "video/x-vnd.on2.vp9"; break;
         }
@@ -663,14 +778,27 @@ static int OpenDecoder(vlc_object_t *p_this, pf_MediaCodecApi_init pf_init)
         return VLC_EGENERIC;
     }
 
+    msg_Dbg(p_dec,
+            "MediaCodecNew DECISION: fmt=%4.4s base=%4.4s dv=%d chosen_mime=%s fallback=%s",
+            (const char *)&p_dec->fmt_in.i_codec,
+            (const char *)&base_codec,
+            strcmp(mime, "video/dolby-vision") == 0,
+            mime,
+            fallback_mime ? fallback_mime : "(none)");
+
     /* Allocate the memory needed to store the decoder's structure */
     if ((p_sys = calloc(1, sizeof(*p_sys))) == NULL)
         return VLC_ENOMEM;
 
     p_sys->api.p_obj = p_this;
-    p_sys->api.i_codec = p_dec->fmt_in.i_codec;
+    p_sys->api.i_codec = base_codec;
     p_sys->api.i_cat = p_dec->fmt_in.i_cat;
     p_sys->api.psz_mime = mime;
+    p_sys->i_mc_profile = mime_profile;
+    p_sys->psz_mc_fallback_mime = fallback_mime;
+    p_sys->i_mc_fallback_profile = fallback_profile;
+    p_sys->b_dovi_probe_done = false;
+    p_sys->i_base_codec = base_codec;
     p_sys->video.i_mpeg_dar_num = 0;
     p_sys->video.i_mpeg_dar_den = 0;
 
@@ -679,19 +807,21 @@ static int OpenDecoder(vlc_object_t *p_this, pf_MediaCodecApi_init pf_init)
         free(p_sys);
         return VLC_EGENERIC;
     }
-    if (p_sys->api.configure(&p_sys->api, i_profile) != 0)
+    if (p_sys->api.configure(&p_sys->api, mime_profile) != 0)
     {
-        /* If the device can't handle video/wvc1,
-         * it can probably handle video/x-ms-wmv */
-        if (!strcmp(mime, "video/wvc1") && p_dec->fmt_in.i_codec == VLC_CODEC_VC1)
+        if (fallback_mime != NULL)
         {
-            p_sys->api.psz_mime = "video/x-ms-wmv";
-            if (p_sys->api.configure(&p_sys->api, i_profile) != 0)
+            msg_Dbg(p_dec, "MediaCodecNew FALLBACK: configure failed for %s -> try %s",
+                mime, fallback_mime);
+            p_sys->api.psz_mime = fallback_mime;
+            p_sys->i_mc_profile = fallback_profile;
+            if (p_sys->api.configure(&p_sys->api, fallback_profile) != 0)
             {
                 p_sys->api.clean(&p_sys->api);
                 free(p_sys);
-                return (VLC_EGENERIC);
+                return VLC_EGENERIC;
             }
+            b_used_fallback = true;
         }
         else
         {
@@ -701,6 +831,12 @@ static int OpenDecoder(vlc_object_t *p_this, pf_MediaCodecApi_init pf_init)
         }
     }
 
+    msg_Dbg(p_dec,
+            "MediaCodecNew RESULT: dv=%d configured_mime=%s used_fallback=%d",
+            strcmp(p_sys->api.psz_mime, "video/dolby-vision") == 0,
+            p_sys->api.psz_mime,
+            b_used_fallback);
+
     p_dec->p_sys = p_sys;
 
     vlc_mutex_init(&p_sys->lock);
@@ -709,12 +845,12 @@ static int OpenDecoder(vlc_object_t *p_this, pf_MediaCodecApi_init pf_init)
 
     if (p_dec->fmt_in.i_cat == VIDEO_ES)
     {
-        switch (p_dec->fmt_in.i_codec)
+        switch (base_codec)
         {
         case VLC_CODEC_H264:
         case VLC_CODEC_HEVC:
             hxxx_helper_init(&p_sys->video.hh, VLC_OBJECT(p_dec),
-                             p_dec->fmt_in.i_codec, false);
+                             base_codec, false);
             break;
         }
         p_sys->pf_on_new_block = Video_OnNewBlock;
@@ -798,7 +934,11 @@ static int OpenDecoder(vlc_object_t *p_this, pf_MediaCodecApi_init pf_init)
     if ((p_sys->api.i_quirks & MC_API_QUIRKS_NEED_CSD) && !p_sys->i_csd_count
      && !p_sys->b_adaptive)
     {
-        switch (p_dec->fmt_in.i_codec)
+        vlc_fourcc_t csd_codec = p_dec->fmt_in.i_codec;
+        if (p_dec->fmt_in.i_cat == VIDEO_ES)
+            csd_codec = BaseVideoCodec(csd_codec);
+
+        switch (csd_codec)
         {
         case VLC_CODEC_H264:
         case VLC_CODEC_HEVC:
@@ -871,8 +1011,8 @@ static void CleanDecoder(decoder_t *p_dec)
 
     if (p_dec->fmt_in.i_cat == VIDEO_ES)
     {
-        if (p_dec->fmt_in.i_codec == VLC_CODEC_H264
-         || p_dec->fmt_in.i_codec == VLC_CODEC_HEVC)
+        if (p_sys->i_base_codec == VLC_CODEC_H264
+         || p_sys->i_base_codec == VLC_CODEC_HEVC)
             hxxx_helper_clean(&p_sys->video.hh);
 
         if (p_sys->video.timestamp_fifo)
@@ -1570,6 +1710,29 @@ static int DecodeBlock(decoder_t *p_dec, block_t *p_in_block)
             case VLC_ENOOBJ:
                 break;
             default:
+                /* If we attempted a Dolby Vision switch, fallback to the base MIME */
+                if (p_sys->psz_mc_fallback_mime != NULL &&
+                    strcmp(p_sys->api.psz_mime, "video/dolby-vision") == 0)
+                {
+                    p_sys->api.psz_mime = p_sys->psz_mc_fallback_mime;
+                    p_sys->i_mc_profile = p_sys->i_mc_fallback_profile;
+
+                    const bool b_configure_ok = p_sys->api.configure(&p_sys->api, p_sys->i_mc_profile) == 0;
+                    if (b_configure_ok)
+                        i_ret = StartMediaCodec(p_dec);
+
+                    const bool b_restart_ok = i_ret == VLC_SUCCESS;
+                    msg_Dbg(p_dec,
+                            "MediaCodecNew RESTART_RESULT: dv=1 fallback=%s configure_ok=%d restart_ok=%d final_mime=%s",
+                            p_sys->psz_mc_fallback_mime,
+                            b_configure_ok,
+                            b_restart_ok,
+                            p_sys->api.psz_mime);
+
+                    if (b_restart_ok)
+                        break;
+                }
+
                 msg_Err(p_dec, "StartMediaCodec failed");
                 AbortDecoderLocked(p_dec);
                 goto end;
@@ -1624,7 +1787,7 @@ static int VideoHXXX_OnNewBlock(decoder_t *p_dec, block_t **pp_block)
     {
         bool b_size_changed;
         int i_ret;
-        switch (p_dec->fmt_in.i_codec)
+        switch (p_sys->i_base_codec)
         {
         case VLC_CODEC_H264:
             if (hh->h264.i_sps_count > 0 || hh->h264.i_pps_count > 0)
@@ -1653,6 +1816,46 @@ static int VideoHXXX_OnNewBlock(decoder_t *p_dec, block_t **pp_block)
             msg_Err(p_dec, "SPS/PPS changed during playback. Drain it");
             p_sys->i_decode_flags |= DECODE_FLAG_DRAIN;
         }
+    }
+
+    /* If the container doesn't signal Dolby Vision but DV RPU is present
+     * (HEVC NAL type 62), try switching to the Dolby Vision MediaCodec MIME.
+     *
+     * Note: MediaCodec_GetName() filters profiles only for video/hevc and
+     * video/avc. For video/dolby-vision we must pass profile <= 0.
+     */
+    if (!p_sys->b_dovi_probe_done && p_sys->i_base_codec == VLC_CODEC_HEVC
+     && strcmp(p_sys->api.psz_mime, "video/hevc") == 0
+     && BlockHasHevcNal62(hh, *pp_block))
+    {
+        p_sys->b_dovi_probe_done = true;
+
+        const char *old_mime = p_sys->api.psz_mime;
+        const int old_profile = p_sys->i_mc_profile;
+
+        p_sys->api.psz_mime = "video/dolby-vision";
+        p_sys->i_mc_profile = 0;
+        p_sys->psz_mc_fallback_mime = old_mime;
+        p_sys->i_mc_fallback_profile = old_profile;
+
+        const bool b_switch_ok = p_sys->api.configure(&p_sys->api, 0) == 0;
+        if (b_switch_ok)
+        {
+            p_sys->i_decode_flags |= DECODE_FLAG_RESTART;
+        }
+        else
+        {
+            /* Keep decoding as plain HEVC */
+            p_sys->api.psz_mime = old_mime;
+            p_sys->i_mc_profile = old_profile;
+        }
+
+        msg_Dbg(p_dec,
+                "MediaCodecNew DVPROBE_RESULT: nal62=1 old_mime=%s switch_ok=%d final_mime=%s restart=%d",
+                old_mime,
+                b_switch_ok,
+                p_sys->api.psz_mime,
+                b_switch_ok);
     }
 
     return Video_OnNewBlock(p_dec, pp_block);

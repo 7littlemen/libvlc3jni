@@ -67,3 +67,5 @@ build/
 .idea/
 *.iml
 sync.ffs_lock
+
+**/vlc4/
