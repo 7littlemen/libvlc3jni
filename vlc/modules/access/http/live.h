@@ -27,10 +27,13 @@
 
 struct vlc_http_resource;
 struct block_t;
+typedef struct vlc_object_t vlc_object_t;
 
 struct vlc_http_resource *vlc_http_live_create(struct vlc_http_mgr *mgr,
                                                const char *uri, const char *ua,
-                                               const char *ref);
+                                               const char *ref,
+                                               const char *custom_headers,
+                                               vlc_object_t *logger);
 struct block_t *vlc_http_live_read(struct vlc_http_resource *);
 
 #define vlc_http_live_get_status vlc_http_res_get_status

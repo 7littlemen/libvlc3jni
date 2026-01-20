@@ -184,10 +184,12 @@ static int Open(vlc_object_t *obj)
 
     char *ua = var_InheritString(obj, "http-user-agent");
     char *referer = var_InheritString(obj, "http-referrer");
+    char *custom_headers = var_InheritString(obj, "custom-http-headers");
     bool live = var_InheritBool(obj, "http-continuous");
 
     sys->resource = (live ? vlc_http_live_create : vlc_http_file_create)(
-        sys->manager, access->psz_url, ua, referer);
+        sys->manager, access->psz_url, ua, referer, custom_headers, obj);
+    free(custom_headers);
     free(referer);
     free(ua);
 
@@ -310,4 +312,14 @@ vlc_module_begin()
                   "e.g. \"FooBar/1.2.3\"."), true)
         change_safe()
         change_private()
+
+    add_string("custom-http-headers", NULL, N_("Custom HTTP headers"),
+               N_("Additional HTTP request headers for this media. "
+                  "Format: header1: value1\\nheader2:value2. "
+                  "Forbidden headers are ignored: Host, Range, Connection, "
+                  "Accept-Encoding, Content-Length, Transfer-Encoding, Cookie."), true)
+        change_safe()
+        change_private()
+        change_volatile()
+
 vlc_module_end()

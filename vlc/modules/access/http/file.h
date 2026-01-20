@@ -29,6 +29,7 @@
 
 struct vlc_http_mgr;
 struct vlc_http_resource;
+typedef struct vlc_object_t vlc_object_t;
 struct block_t;
 
 /**
@@ -44,7 +45,9 @@ struct block_t;
  */
 struct vlc_http_resource *vlc_http_file_create(struct vlc_http_mgr *mgr,
                                                const char *url, const char *ua,
-                                               const char *ref);
+                                               const char *ref,
+                                               const char *custom_headers,
+                                               vlc_object_t *logger);
 
 /**
  * Gets file size.

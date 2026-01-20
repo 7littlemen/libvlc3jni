@@ -27,6 +27,8 @@
 #include "../AbstractSource.hpp"
 #include "../plumbing/SourceStream.hpp"
 
+#include <vlc_common.h>
+#include <vlc_fixups.h>
 #include <vlc_stream.h>
 #include <vlc_keystore.h>
 #include <vlc_interrupt.h>
@@ -89,9 +91,10 @@ class adaptive::http::LibVLCHTTPSource : public adaptive::AbstractSource
      friend class LibVLCHTTPConnection;
 
      public:
-        LibVLCHTTPSource(vlc_object_t *p_object, struct vlc_http_cookie_jar_t *jar)
+        LibVLCHTTPSource(vlc_object_t *obj, struct vlc_http_cookie_jar_t *jar)
         {
-            http_mgr = vlc_http_mgr_create(p_object, jar);
+            vlcObject = obj;
+            http_mgr = vlc_http_mgr_create(obj, jar);
             http_res = nullptr;
             totalRead = 0;
         }
@@ -122,6 +125,7 @@ class adaptive::http::LibVLCHTTPSource : public adaptive::AbstractSource
         }
 
     private:
+        vlc_object_t *vlcObject;
         struct restuple
         {
             struct vlc_http_resource resource;
@@ -197,9 +201,13 @@ class adaptive::http::LibVLCHTTPSource : public adaptive::AbstractSource
             struct restuple *tpl = new struct restuple;
             tpl->source = this;
             this->range = range;
-            if (vlc_http_res_init(&tpl->resource, &this->callbacks, http_mgr, uri,
-                                  ua.empty() ? nullptr : ua.c_str(),
-                                  ref.empty() ? nullptr : ref.c_str()))
+            char *custom_headers = var_InheritString(vlcObject, "custom-http-headers");
+            int ret = vlc_http_res_init(&tpl->resource, &this->callbacks, http_mgr, uri,
+                                        ua.empty() ? nullptr : ua.c_str(),
+                                        ref.empty() ? nullptr : ref.c_str(),
+                                        custom_headers, vlcObject);
+            free(custom_headers);
+            if (ret)
             {
                 delete tpl;
                 return -1;
