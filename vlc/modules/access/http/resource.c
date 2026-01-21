@@ -353,7 +353,7 @@ int vlc_http_res_get_status(struct vlc_http_resource *res)
         if (res->failure)
             return -1;
 
-        res->response = vlc_http_res_open(res, res + 1);
+        res->response = vlc_http_res_open(res, NULL);
         if (res->response == NULL)
         {
             res->failure = true;

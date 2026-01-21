@@ -49,7 +49,7 @@ static int vlc_http_file_req(const struct vlc_http_resource *res,
                              struct vlc_http_msg *req, void *opaque)
 {
     struct vlc_http_file *file = (struct vlc_http_file *)res;
-    const uintmax_t *offset = opaque;
+    const uintmax_t *offset = (opaque != NULL) ? opaque : &file->offset;
 
     if (file->resource.response != NULL)
     {
@@ -78,7 +78,8 @@ static int vlc_http_file_req(const struct vlc_http_resource *res,
 static int vlc_http_file_resp(const struct vlc_http_resource *res,
                               const struct vlc_http_msg *resp, void *opaque)
 {
-    const uintmax_t *offset = opaque;
+    const struct vlc_http_file *file = (const struct vlc_http_file *)res;
+    const uintmax_t *offset = (opaque != NULL) ? opaque : &file->offset;
 
     if (vlc_http_msg_get_status(resp) == 206)
     {
