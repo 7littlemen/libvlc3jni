@@ -1424,6 +1424,66 @@ int libvlc_video_take_snapshot( libvlc_media_player_t *p_mi, unsigned num,
                                 unsigned int i_height );
 
 /**
+ * Get current subtitle text scaling factor.
+ *
+ * This affects the size of text based subtitles (SRT/ASS/SSA etc.).
+ * The returned value is a multiplicative factor (1.0 = 100%).
+ */
+LIBVLC_API float libvlc_video_get_spu_text_scale( libvlc_media_player_t *p_mi );
+
+/**
+ * Set subtitle text scaling factor.
+ *
+ * Typical values are in range 0.1 to 5.0 (internally clamped to 10%..500%).
+ */
+LIBVLC_API void libvlc_video_set_spu_text_scale( libvlc_media_player_t *p_mi,
+                                                float scale );
+
+/**
+ * Get current subtitle bottom margin in pixels.
+ */
+LIBVLC_API int libvlc_video_get_spu_text_position( libvlc_media_player_t *p_mi );
+
+/**
+ * Set subtitle bottom margin in pixels.
+ */
+LIBVLC_API void libvlc_video_set_spu_text_position( libvlc_media_player_t *p_mi,
+                                                    int margin_px );
+
+/**
+ * Get subtitle text color (0xRRGGBB).
+ */
+LIBVLC_API int64_t libvlc_video_get_spu_text_color( libvlc_media_player_t *p_mi );
+
+/**
+ * Set subtitle text color (0xRRGGBB).
+ */
+LIBVLC_API void libvlc_video_set_spu_text_color( libvlc_media_player_t *p_mi,
+                                                 int64_t color );
+
+/**
+ * Get subtitle outline color (0xRRGGBB).
+ */
+LIBVLC_API int64_t libvlc_video_get_spu_outline_color( libvlc_media_player_t *p_mi );
+
+/**
+ * Set subtitle outline color (0xRRGGBB).
+ */
+LIBVLC_API void libvlc_video_set_spu_outline_color( libvlc_media_player_t *p_mi,
+                                                    int64_t color );
+
+/**
+ * Get subtitle outline thickness.
+ */
+LIBVLC_API int libvlc_video_get_spu_outline_thickness( libvlc_media_player_t *p_mi );
+
+/**
+ * Set subtitle outline thickness.
+ */
+LIBVLC_API void libvlc_video_set_spu_outline_thickness( libvlc_media_player_t *p_mi,
+                                                        int thickness );
+
+/**
  * Enable or disable deinterlace filter
  *
  * \param p_mi libvlc media player

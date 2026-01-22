@@ -89,6 +89,27 @@ err:
     return p_vout;
 }
 
+static libvlc_int_t *GetLibvlcInt(libvlc_media_player_t *p_mi)
+{
+    if (!p_mi || !p_mi->p_libvlc_instance)
+        return NULL;
+    return p_mi->p_libvlc_instance->p_libvlc_int;
+}
+
+static void ApplyIntegerToVouts(libvlc_media_player_t *p_mi, const char *psz_var, int i_val)
+{
+    size_t n;
+    vout_thread_t **pp_vouts = GetVouts(p_mi, &n);
+    for (size_t i = 0; i < n; i++)
+    {
+        vout_thread_t *p_vout = pp_vouts[i];
+        var_Create(p_vout, psz_var, VLC_VAR_INTEGER);
+        var_SetInteger(p_vout, psz_var, i_val);
+        vlc_object_release(p_vout);
+    }
+    free(pp_vouts);
+}
+
 /**********************************************************************
  * Exported functions
  **********************************************************************/
@@ -259,6 +280,138 @@ void libvlc_video_set_scale( libvlc_media_player_t *p_mp, float f_scale )
         vlc_object_release (p_vout);
     }
     free (pp_vouts);
+}
+
+float libvlc_video_get_spu_text_scale(libvlc_media_player_t *p_mi)
+{
+    libvlc_int_t *p_libvlc = GetLibvlcInt(p_mi);
+    int i_scale = p_libvlc ? var_InheritInteger(p_libvlc, "sub-text-scale")
+                           : var_InheritInteger(p_mi, "sub-text-scale");
+    if (i_scale <= 0)
+        i_scale = 100;
+    return ((float) i_scale) / 100.f;
+}
+
+void libvlc_video_set_spu_text_scale(libvlc_media_player_t *p_mi, float scale)
+{
+    if (!isfinite(scale) || scale <= 0.f)
+        return;
+
+    int i_scale = (int) lroundf(scale * 100.f);
+    if (i_scale < 10)
+        i_scale = 10;
+    else if (i_scale > 500)
+        i_scale = 500;
+
+    libvlc_int_t *p_libvlc = GetLibvlcInt(p_mi);
+    if (p_libvlc)
+    {
+        var_Create(p_libvlc, "sub-text-scale", VLC_VAR_INTEGER);
+        var_SetInteger(p_libvlc, "sub-text-scale", i_scale);
+    }
+    var_Create(p_mi, "sub-text-scale", VLC_VAR_INTEGER);
+    var_SetInteger(p_mi, "sub-text-scale", i_scale);
+    ApplyIntegerToVouts(p_mi, "sub-text-scale", i_scale);
+}
+
+int libvlc_video_get_spu_text_position(libvlc_media_player_t *p_mi)
+{
+    libvlc_int_t *p_libvlc = GetLibvlcInt(p_mi);
+    int i_margin = p_libvlc ? var_InheritInteger(p_libvlc, "sub-margin")
+                            : var_InheritInteger(p_mi, "sub-margin");
+    if (i_margin < 0)
+        i_margin = 0;
+    return i_margin;
+}
+
+void libvlc_video_set_spu_text_position(libvlc_media_player_t *p_mi, int margin_px)
+{
+    if (margin_px < 0)
+        margin_px = 0;
+
+    libvlc_int_t *p_libvlc = GetLibvlcInt(p_mi);
+    if (p_libvlc)
+    {
+        var_Create(p_libvlc, "sub-margin", VLC_VAR_INTEGER);
+        var_SetInteger(p_libvlc, "sub-margin", margin_px);
+    }
+    var_Create(p_mi, "sub-margin", VLC_VAR_INTEGER);
+    var_SetInteger(p_mi, "sub-margin", margin_px);
+    ApplyIntegerToVouts(p_mi, "sub-margin", margin_px);
+}
+
+int64_t libvlc_video_get_spu_text_color(libvlc_media_player_t *p_mi)
+{
+    libvlc_int_t *p_libvlc = GetLibvlcInt(p_mi);
+    int64_t i_color = p_libvlc ? var_InheritInteger(p_libvlc, "freetype-color")
+                               : var_InheritInteger(p_mi, "freetype-color");
+    return i_color & 0x00FFFFFF;
+}
+
+void libvlc_video_set_spu_text_color(libvlc_media_player_t *p_mi, int64_t color)
+{
+    int i_color = (int) (color & 0x00FFFFFF);
+
+    libvlc_int_t *p_libvlc = GetLibvlcInt(p_mi);
+    if (p_libvlc)
+    {
+        var_Create(p_libvlc, "freetype-color", VLC_VAR_INTEGER);
+        var_SetInteger(p_libvlc, "freetype-color", i_color);
+    }
+    var_Create(p_mi, "freetype-color", VLC_VAR_INTEGER);
+    var_SetInteger(p_mi, "freetype-color", i_color);
+    ApplyIntegerToVouts(p_mi, "freetype-color", i_color);
+}
+
+int64_t libvlc_video_get_spu_outline_color(libvlc_media_player_t *p_mi)
+{
+    libvlc_int_t *p_libvlc = GetLibvlcInt(p_mi);
+    int64_t i_color = p_libvlc ? var_InheritInteger(p_libvlc, "freetype-outline-color")
+                               : var_InheritInteger(p_mi, "freetype-outline-color");
+    return i_color & 0x00FFFFFF;
+}
+
+void libvlc_video_set_spu_outline_color(libvlc_media_player_t *p_mi, int64_t color)
+{
+    int i_color = (int) (color & 0x00FFFFFF);
+
+    libvlc_int_t *p_libvlc = GetLibvlcInt(p_mi);
+    if (p_libvlc)
+    {
+        var_Create(p_libvlc, "freetype-outline-color", VLC_VAR_INTEGER);
+        var_SetInteger(p_libvlc, "freetype-outline-color", i_color);
+    }
+    var_Create(p_mi, "freetype-outline-color", VLC_VAR_INTEGER);
+    var_SetInteger(p_mi, "freetype-outline-color", i_color);
+    ApplyIntegerToVouts(p_mi, "freetype-outline-color", i_color);
+}
+
+int libvlc_video_get_spu_outline_thickness(libvlc_media_player_t *p_mi)
+{
+    libvlc_int_t *p_libvlc = GetLibvlcInt(p_mi);
+    int i_thickness = p_libvlc ? var_InheritInteger(p_libvlc, "freetype-outline-thickness")
+                               : var_InheritInteger(p_mi, "freetype-outline-thickness");
+    if (i_thickness < 0)
+        i_thickness = 0;
+    return i_thickness;
+}
+
+void libvlc_video_set_spu_outline_thickness(libvlc_media_player_t *p_mi, int thickness)
+{
+    if (thickness < 0)
+        thickness = 0;
+    else if (thickness > 50)
+        thickness = 50;
+
+    libvlc_int_t *p_libvlc = GetLibvlcInt(p_mi);
+    if (p_libvlc)
+    {
+        var_Create(p_libvlc, "freetype-outline-thickness", VLC_VAR_INTEGER);
+        var_SetInteger(p_libvlc, "freetype-outline-thickness", thickness);
+    }
+    var_Create(p_mi, "freetype-outline-thickness", VLC_VAR_INTEGER);
+    var_SetInteger(p_mi, "freetype-outline-thickness", thickness);
+    ApplyIntegerToVouts(p_mi, "freetype-outline-thickness", thickness);
 }
 
 char *libvlc_video_get_aspect_ratio( libvlc_media_player_t *p_mi )

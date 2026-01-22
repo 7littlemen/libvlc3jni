@@ -69,3 +69,4 @@ build/
 sync.ffs_lock
 
 **/vlc4/
+**/libvlc4/

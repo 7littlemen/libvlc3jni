@@ -48,6 +48,7 @@ static const libvlc_event_type_t mp_events[] = {
     libvlc_MediaPlayerEncounteredError,
     libvlc_MediaPlayerTimeChanged,
     libvlc_MediaPlayerPositionChanged,
+    libvlc_MediaPlayerSnapshotTaken,
     libvlc_MediaPlayerVout,
     libvlc_MediaPlayerESAdded,
     libvlc_MediaPlayerESDeleted,
@@ -121,6 +122,9 @@ MediaPlayer_event_cb(vlcjni_object *p_obj, const libvlc_event_t *p_ev,
             break;
         case libvlc_MediaPlayerVout:
             p_java_event->arg1 = p_ev->u.media_player_vout.new_count;
+            break;
+        case libvlc_MediaPlayerSnapshotTaken:
+            p_java_event->argc1 = p_ev->u.media_player_snapshot_taken.psz_filename;
             break;
         case libvlc_MediaPlayerESAdded:
         case libvlc_MediaPlayerESDeleted:
@@ -1004,6 +1008,159 @@ Java_org_videolan_libvlc_MediaPlayer_nativeSetSpuDelay(JNIEnv *env,
 
     return libvlc_video_set_spu_delay(p_obj->u.p_mp, delay) == 0 ? true : false;
 }
+
+// --- BEGIN New JNI METHODS ---
+jfloat
+Java_org_videolan_libvlc_MediaPlayer_nativeGetSpuTextScale(JNIEnv *env,
+                                                           jobject thiz)
+{
+    vlcjni_object *p_obj = VLCJniObject_getInstance(env, thiz);
+
+    if (!p_obj)
+        return 1.0f;
+
+    return (jfloat) libvlc_video_get_spu_text_scale(p_obj->u.p_mp);
+}
+
+void
+Java_org_videolan_libvlc_MediaPlayer_nativeSetSpuTextScale(JNIEnv *env,
+                                                           jobject thiz,
+                                                           jfloat scale)
+{
+    vlcjni_object *p_obj = VLCJniObject_getInstance(env, thiz);
+
+    if (!p_obj)
+        return;
+
+    libvlc_video_set_spu_text_scale(p_obj->u.p_mp, (float) scale);
+}
+
+jint
+Java_org_videolan_libvlc_MediaPlayer_nativeGetSpuTextPosition(JNIEnv *env,
+                                                              jobject thiz)
+{
+    vlcjni_object *p_obj = VLCJniObject_getInstance(env, thiz);
+
+    if (!p_obj)
+        return 0;
+
+    return (jint) libvlc_video_get_spu_text_position(p_obj->u.p_mp);
+}
+
+void
+Java_org_videolan_libvlc_MediaPlayer_nativeSetSpuTextPosition(JNIEnv *env,
+                                                              jobject thiz,
+                                                              jint margin_px)
+{
+    vlcjni_object *p_obj = VLCJniObject_getInstance(env, thiz);
+
+    if (!p_obj)
+        return;
+
+    libvlc_video_set_spu_text_position(p_obj->u.p_mp, (int) margin_px);
+}
+
+void
+Java_org_videolan_libvlc_MediaPlayer_nativeSetSpuTextColor(JNIEnv *env,
+                                                           jobject thiz,
+                                                           jlong color)
+{
+    vlcjni_object *p_obj = VLCJniObject_getInstance(env, thiz);
+
+    if (!p_obj)
+        return;
+
+    libvlc_video_set_spu_text_color(p_obj->u.p_mp, (int64_t) color);
+}
+
+jlong
+Java_org_videolan_libvlc_MediaPlayer_nativeGetSpuTextColor(JNIEnv *env,
+                                                           jobject thiz)
+{
+    vlcjni_object *p_obj = VLCJniObject_getInstance(env, thiz);
+
+    if (!p_obj)
+        return 0;
+
+    return (jlong) libvlc_video_get_spu_text_color(p_obj->u.p_mp);
+}
+
+void
+Java_org_videolan_libvlc_MediaPlayer_nativeSetSpuOutlineColor(JNIEnv *env,
+                                                              jobject thiz,
+                                                              jlong color)
+{
+    vlcjni_object *p_obj = VLCJniObject_getInstance(env, thiz);
+
+    if (!p_obj)
+        return;
+
+    libvlc_video_set_spu_outline_color(p_obj->u.p_mp, (int64_t) color);
+}
+
+jlong
+Java_org_videolan_libvlc_MediaPlayer_nativeGetSpuOutlineColor(JNIEnv *env,
+                                                              jobject thiz)
+{
+    vlcjni_object *p_obj = VLCJniObject_getInstance(env, thiz);
+
+    if (!p_obj)
+        return 0;
+
+    return (jlong) libvlc_video_get_spu_outline_color(p_obj->u.p_mp);
+}
+
+void
+Java_org_videolan_libvlc_MediaPlayer_nativeSetSpuOutlineThickness(JNIEnv *env,
+                                                                  jobject thiz,
+                                                                  jint thickness)
+{
+    vlcjni_object *p_obj = VLCJniObject_getInstance(env, thiz);
+
+    if (!p_obj)
+        return;
+
+    libvlc_video_set_spu_outline_thickness(p_obj->u.p_mp, (int) thickness);
+}
+
+jint
+Java_org_videolan_libvlc_MediaPlayer_nativeGetSpuOutlineThickness(JNIEnv *env,
+                                                                  jobject thiz)
+{
+    vlcjni_object *p_obj = VLCJniObject_getInstance(env, thiz);
+
+    if (!p_obj)
+        return 0;
+
+    return (jint) libvlc_video_get_spu_outline_thickness(p_obj->u.p_mp);
+}
+
+jboolean
+Java_org_videolan_libvlc_MediaPlayer_nativeTakeSnapshot(JNIEnv *env, jobject thiz,
+                                                        jint num, jstring jfilepath,
+                                                        jint width, jint height)
+{
+    vlcjni_object *p_obj = VLCJniObject_getInstance(env, thiz);
+    if (!p_obj)
+        return false;
+
+    const char *psz_path = NULL;
+    if (!jfilepath || !(psz_path = (*env)->GetStringUTFChars(env, jfilepath, 0)))
+    {
+        throw_Exception(env, VLCJNI_EX_ILLEGAL_ARGUMENT, "snapshot filepath invalid");
+        return false;
+    }
+
+    int ret = libvlc_video_take_snapshot(p_obj->u.p_mp,
+                                         (unsigned) num,
+                                         psz_path,
+                                         (unsigned) width,
+                                         (unsigned) height);
+
+    (*env)->ReleaseStringUTFChars(env, jfilepath, psz_path);
+    return ret == 0 ? true : false;
+}
+// --- END NEW JNI METHODS ---
 
 float
 Java_org_videolan_libvlc_MediaPlayer_nativeGetScale(JNIEnv *env, jobject thiz)

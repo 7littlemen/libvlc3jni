@@ -80,7 +80,7 @@ public class MediaPlayer extends VLCObject<MediaPlayer.Event> {
         public static final int SeekableChanged     = 0x10d;
         public static final int PausableChanged     = 0x10e;
         //public static final int TitleChanged        = 0x10f;
-        //public static final int SnapshotTaken       = 0x110;
+        public static final int SnapshotTaken       = 0x110;
         public static final int LengthChanged       = 0x111;
         public static final int Vout                = 0x112;
         //public static final int ScrambledChanged    = 0x113;
@@ -149,6 +149,11 @@ public class MediaPlayer extends VLCObject<MediaPlayer.Event> {
         }
         @Nullable
         public String getRecordPath() {
+            return args1;
+        }
+
+        @Nullable
+        public String getSnapshotPath() {
             return args1;
         }
     }
@@ -1227,6 +1232,180 @@ public class MediaPlayer extends VLCObject<MediaPlayer.Event> {
         return nativeSetSpuDelay(delay);
     }
 
+        /**
+         * Get current subtitle text scaling factor.
+            *
+            * This value affects the size of text-based subtitles (SPU/SSA/ASS/SRT etc.) rendered by libVLC.
+            * It can be changed while playing (i.e. real-time).
+            *
+            * @return current subtitle text scale factor.
+     */
+    public float getSpuTextScale() {
+        return nativeGetSpuTextScale();
+    }
+
+    /**
+     * Get current subtitle text position (bottom margin).
+     *
+     * This value affects the vertical position of subtitles by adding a margin
+     * from the bottom of the video.
+     * It can be changed while playing (i.e. real-time).
+     *
+     * @return bottom margin in pixels (same semantics as libVLC --sub-margin)
+     */
+    public int getSpuTextPosition() {
+        return nativeGetSpuTextPosition();
+    }
+
+    /**
+     * Get current subtitle text color.
+     *
+     * @return subtitle text color in {@code 0xRRGGBB} format.
+     */
+    public long getSpuTextColor() {
+        return nativeGetSpuTextColor();
+    }
+
+    /**
+     * Get current subtitle outline color.
+     *
+     * @return subtitle outline color in {@code 0xRRGGBB} format.
+     */
+    public long getSpuOutlineColor() {
+        return nativeGetSpuOutlineColor();
+    }
+
+    /**
+     * Get current subtitle outline thickness.
+     *
+     * Typical values:
+     *  - 0: none
+     *  - 2: thin
+     *  - 4: normal
+     *  - 6: thick
+     *
+     * @return outline thickness (same semantics as libVLC --freetype-outline-thickness)
+     */
+    public int getSpuOutlineThickness() {
+        return nativeGetSpuOutlineThickness();
+    }
+
+    /**
+     * Set subtitle text scaling factor.
+     *
+     * This is the recommended real-time way to change subtitle size in libVLC.
+     * Typical values:
+     *  - 1.0f: default
+     *  - 0.5f: smaller
+     *  - 2.0f: larger
+     *
+     * Note: this affects text-based subtitles; bitmap-based subtitles (e.g. PGS) may not be affected.
+     *
+     * @param scale scaling factor (e.g. 0.5f ~ 3.0f)
+     */
+    public void setSpuTextScale(float scale) {
+        nativeSetSpuTextScale(scale);
+    }
+
+    /**
+     * Set subtitle text position (bottom margin).
+     *
+     * This is the recommended real-time way to move subtitles up/down.
+     *
+     * @param marginPx bottom margin in pixels (same semantics as libVLC --sub-margin)
+     */
+    public void setSpuTextPosition(int marginPx) {
+        nativeSetSpuTextPosition(marginPx);
+    }
+
+    /**
+     * Set subtitle text color.
+     *
+     * This affects text-based subtitles rendered by libVLC (SRT/ASS/SSA etc.).
+     * It can be changed while playing (i.e. real-time).
+     *
+     * Expected format is {@code 0xRRGGBB}. If an Android {@code 0xAARRGGBB}
+     * color is provided, the alpha component is ignored.
+     *
+     * @param color subtitle text color (0xRRGGBB or 0xAARRGGBB)
+     */
+    public void setSpuTextColor(long color) {
+        nativeSetSpuTextColor(color);
+    }
+
+    /**
+     * Set subtitle outline color.
+     *
+     * This affects text-based subtitles rendered by libVLC (SRT/ASS/SSA etc.).
+     * It can be changed while playing (i.e. real-time).
+     *
+     * Expected format is {@code 0xRRGGBB}. If an Android {@code 0xAARRGGBB}
+     * color is provided, the alpha component is ignored.
+     *
+     * @param color subtitle outline color (0xRRGGBB or 0xAARRGGBB)
+     */
+    public void setSpuOutlineColor(long color) {
+        nativeSetSpuOutlineColor(color);
+    }
+
+    /**
+     * Set subtitle outline thickness.
+     *
+     * This affects text-based subtitles rendered by libVLC (SRT/ASS/SSA etc.).
+     * It can be changed while playing (i.e. real-time).
+     *
+     * Typical values:
+     *  - 0: none
+     *  - 2: thin
+     *  - 4: normal
+     *  - 6: thick
+     *
+     * @param thickness outline thickness (same semantics as libVLC --freetype-outline-thickness)
+     */
+    public void setSpuOutlineThickness(int thickness) {
+        nativeSetSpuOutlineThickness(thickness);
+    }
+
+    /**
+     * Take a snapshot of the current video frame.
+     *
+     * <p>This is an asynchronous operation. If the snapshot request is accepted,
+     * {@link Event#SnapshotTaken} will be fired once the image has been written to disk.
+     * The actual saved file path can be retrieved via {@link Event#getSnapshotPath()}.</p>
+     *
+     * <p>This overload always uses snapshot index {@code 0}, which is sufficient for
+     * almost all use cases.</p>
+     *
+     * @param filePath absolute output file path (e.g. /sdcard/Pictures/snapshot.png)
+     * @param width    desired snapshot width in pixels, or {@code 0} to keep original width
+     * @param height   desired snapshot height in pixels, or {@code 0} to keep original height
+     * @return {@code true} if the snapshot request was accepted by libVLC, {@code false} otherwise
+     */
+    public boolean takeSnapshot(@NonNull String filePath, int width, int height) {
+        return nativeTakeSnapshot(0, filePath, width, height);
+    }
+
+    /**
+     * Take a snapshot of the current video frame with an explicit snapshot index.
+     *
+     * <p>The {@code num} parameter is a snapshot identifier used internally by libVLC.
+     * It allows multiple snapshot requests to be issued in parallel and helps libVLC
+     * distinguish between them. In practice, libVLC does <strong>not</strong> generate
+     * multiple images automatically based on this value.</p>
+     *
+     * <p>For normal applications, you should always pass {@code 0} and use
+     * {@link #takeSnapshot(String, int, int)} instead.</p>
+     *
+     * @param num      snapshot index (usually {@code 0})
+     * @param filePath absolute output file path (must be writable)
+     * @param width    desired snapshot width in pixels, or {@code 0} to keep original width
+     * @param height   desired snapshot height in pixels, or {@code 0} to keep original height
+     * @return {@code true} if the snapshot request was accepted by libVLC, {@code false} otherwise
+     */
+    public boolean takeSnapshot(int num, @NonNull String filePath, int width, int height) {
+        return nativeTakeSnapshot(num, filePath, width, height);
+    }
+
     /**
      * Apply new equalizer settings to a media player.
      *
@@ -1423,6 +1602,8 @@ public class MediaPlayer extends VLCObject<MediaPlayer.Event> {
                 return new Event(eventType, arg1);
             case Event.PositionChanged:
                 return new Event(eventType, argf1);
+            case Event.SnapshotTaken:
+                return new Event(eventType, 0L, args1);
             case Event.Vout:
                 mVoutCount = (int) arg1;
                 notify();
@@ -1505,6 +1686,17 @@ public class MediaPlayer extends VLCObject<MediaPlayer.Event> {
     private native boolean nativeSetSpuTrack(int index);
     private native long nativeGetSpuDelay();
     private native boolean nativeSetSpuDelay(long delay);
+    private native float nativeGetSpuTextScale();
+    private native void nativeSetSpuTextScale(float scale);
+    private native int nativeGetSpuTextPosition();
+    private native void nativeSetSpuTextPosition(int marginPx);
+    private native void nativeSetSpuTextColor(long color);
+    private native long nativeGetSpuTextColor();
+    private native void nativeSetSpuOutlineColor(long color);
+    private native long nativeGetSpuOutlineColor();
+    private native void nativeSetSpuOutlineThickness(int thickness);
+    private native int nativeGetSpuOutlineThickness();
+    private native boolean nativeTakeSnapshot(int num, @NonNull String filePath, int width, int height);
     private native boolean nativeAddSlave(int type, String location, boolean select);
     private native boolean nativeRecord(String directory);
     private native boolean nativeSetEqualizer(Equalizer equalizer);
