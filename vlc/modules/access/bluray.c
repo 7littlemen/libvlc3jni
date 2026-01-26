@@ -856,30 +856,30 @@ static int blurayOpen(vlc_object_t *object)
              disc_info->num_unsupported_titles);
 
     /* AACS */
-    if (disc_info->aacs_detected) {
-        msg_Dbg(p_demux, "Disc is using AACS");
-        if (!disc_info->libaacs_detected)
-            BLURAY_ERROR(_("This Blu-ray Disc needs a library for AACS decoding"
-                      ", and your system does not have it."));
-        if (!disc_info->aacs_handled) {
-            if (disc_info->aacs_error_code) {
-                switch (disc_info->aacs_error_code) {
-                case BD_AACS_CORRUPTED_DISC:
-                    BLURAY_ERROR(_("Blu-ray Disc is corrupted."));
-                case BD_AACS_NO_CONFIG:
-                    BLURAY_ERROR(_("Missing AACS configuration file!"));
-                case BD_AACS_NO_PK:
-                    BLURAY_ERROR(_("No valid processing key found in AACS config file."));
-                case BD_AACS_NO_CERT:
-                    BLURAY_ERROR(_("No valid host certificate found in AACS config file."));
-                case BD_AACS_CERT_REVOKED:
-                    BLURAY_ERROR(_("AACS Host certificate revoked."));
-                case BD_AACS_MMC_FAILED:
-                    BLURAY_ERROR(_("AACS MMC failed."));
-                }
-            }
-        }
-    }
+    // if (disc_info->aacs_detected) {
+    //     msg_Dbg(p_demux, "Disc is using AACS");
+    //     if (!disc_info->libaacs_detected)
+    //         BLURAY_ERROR(_("This Blu-ray Disc needs a library for AACS decoding"
+    //                   ", and your system does not have it."));
+    //     if (!disc_info->aacs_handled) {
+    //         if (disc_info->aacs_error_code) {
+    //             switch (disc_info->aacs_error_code) {
+    //             case BD_AACS_CORRUPTED_DISC:
+    //                 BLURAY_ERROR(_("Blu-ray Disc is corrupted."));
+    //             case BD_AACS_NO_CONFIG:
+    //                 BLURAY_ERROR(_("Missing AACS configuration file!"));
+    //             case BD_AACS_NO_PK:
+    //                 BLURAY_ERROR(_("No valid processing key found in AACS config file."));
+    //             case BD_AACS_NO_CERT:
+    //                 BLURAY_ERROR(_("No valid host certificate found in AACS config file."));
+    //             case BD_AACS_CERT_REVOKED:
+    //                 BLURAY_ERROR(_("AACS Host certificate revoked."));
+    //             case BD_AACS_MMC_FAILED:
+    //                 BLURAY_ERROR(_("AACS MMC failed."));
+    //             }
+    //         }
+    //     }
+    // }
 
     /* BD+ */
     if (disc_info->bdplus_detected) {
