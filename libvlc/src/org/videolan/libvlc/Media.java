@@ -22,6 +22,7 @@ package org.videolan.libvlc;
 
 import android.content.res.AssetFileDescriptor;
 import android.net.Uri;
+import android.util.Log;
 
 import androidx.annotation.Nullable;
 
@@ -506,6 +507,7 @@ public class Media extends VLCObject<IMedia.Event> implements IMedia {
      * Enable HWDecoder options if not already set
      */
     public void setDefaultMediaPlayerOptions() {
+        Log.v(TAG, "setDefaultMediaPlayerOptions(): uri=" + mUri);
         if (LibVLC.majorVersion() == 3) {
             boolean codecOptionSet;
             synchronized (this) {
@@ -517,9 +519,16 @@ public class Media extends VLCObject<IMedia.Event> implements IMedia {
         }
 
         /* dvdnav need to be explicitly forced for network playbacks */
-        if (mUri != null && mUri.getScheme() != null && !mUri.getScheme().equalsIgnoreCase("file") &&
-                mUri.getLastPathSegment() != null && mUri.getLastPathSegment().toLowerCase().endsWith(".iso"))
+        final String scheme = mUri != null ? mUri.getScheme() : null;
+        final String lastPath = mUri != null ? mUri.getLastPathSegment() : null;
+        final boolean shouldForceDvdnav = mUri != null && scheme != null && !scheme.equalsIgnoreCase("file") &&
+                lastPath != null && lastPath.toLowerCase().endsWith(".iso");
+        if (shouldForceDvdnav) {
+            Log.v(TAG, "Forcing dvdnav demux for network ISO: scheme=" + scheme + ", lastPath=" + lastPath);
             addOption(":demux=dvdnav,any");
+        } else {
+            Log.v(TAG, "Not forcing dvdnav demux: scheme=" + scheme + ", lastPath=" + lastPath);
+        }
     }
 
     /**
@@ -538,6 +547,8 @@ public class Media extends VLCObject<IMedia.Event> implements IMedia {
      * @param option ":option" or ":option=value"
      */
     public void addOption(String option) {
+        if (option != null && option.startsWith(":demux="))
+            Log.v(TAG, "addOption(): " + option + " (uri=" + mUri + ")");
         synchronized (this) {
             if (!mCodecOptionSet && option.startsWith(":codec="))
                 mCodecOptionSet = true;
