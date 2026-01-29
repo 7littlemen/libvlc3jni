@@ -525,7 +525,7 @@ public class Media extends VLCObject<IMedia.Event> implements IMedia {
                 lastPath != null && lastPath.toLowerCase().endsWith(".iso");
         if (shouldForceDvdnav) {
             Log.v(TAG, "Forcing dvdnav demux for network ISO: scheme=" + scheme + ", lastPath=" + lastPath);
-            addOption(":demux=libbluray,dvdnav,any");
+            addOption(":demux=dvdnav,any");
         } else {
             Log.v(TAG, "Not forcing dvdnav demux: scheme=" + scheme + ", lastPath=" + lastPath);
         }
